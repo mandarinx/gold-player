@@ -1,123 +1,463 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
+#if UNITY_2019_1_OR_NEWER
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
+using static Hertzole.GoldPlayer.Editor.GoldPlayerUIHelper;
+#endif
 
 namespace Hertzole.GoldPlayer.Editor
 {
     [CustomEditor(typeof(GoldPlayerController))]
     internal class GoldPlayerControllerEditor : UnityEditor.Editor
     {
-        private int m_CurrentTab = 0;
+        private int currentTab = 0;
 
-        private readonly string[] m_Tabs = new string[] { "Camera", "Movement", "Head Bob", "Audio" };
+        private readonly string[] tabs = new string[] { "Camera", "Movement", "Head Bob", "Audio", "Input" };
         private const string SELECTED_TAB_PREFS = "HERTZ_GOLD_PLAYER_SELECTED_TAB";
 
-        private GoldPlayerController m_GoldPlayer;
-        private CharacterController m_CharacterController;
+        private GoldPlayerController goldPlayer;
+        private CharacterController characterController;
 
-        private SerializedProperty m_Camera;
-        private SerializedProperty m_Movement;
-        private SerializedProperty m_HeadBob;
-        private SerializedProperty m_Audio;
+        private SerializedProperty camera;
+        private SerializedProperty movement;
+        private SerializedProperty headBob;
+        private SerializedProperty audio;
+
+#if UNITY_2019_1_OR_NEWER
+        private VisualElement root;
+
+        private VisualElement cameraElements;
+        private VisualElement movementElements;
+        private VisualElement headBobElements;
+        private VisualElement audioElements;
+        private VisualElement inputElements;
+
+        private VisualElement controllerWarning;
+        private VisualElement crouchHeightWarning;
+        private VisualElement groundLayerWarning;
+#endif
 
         private void OnEnable()
         {
-            m_CurrentTab = EditorPrefs.GetInt(SELECTED_TAB_PREFS, 0);
+            currentTab = EditorPrefs.GetInt(SELECTED_TAB_PREFS, 0);
 
-            if (m_CurrentTab < 0)
-                m_CurrentTab = 0;
-            if (m_CurrentTab > 3)
-                m_CurrentTab = 3;
-
-            m_Camera = serializedObject.FindProperty("m_Camera");
-            m_Movement = serializedObject.FindProperty("m_Movement");
-            m_HeadBob = serializedObject.FindProperty("m_HeadBob");
-            m_Audio = serializedObject.FindProperty("m_Audio");
-
-            m_GoldPlayer = (GoldPlayerController)target;
-            m_CharacterController = m_GoldPlayer.GetComponent<CharacterController>();
-        }
-
-        public override void OnInspectorGUI()
-        {
-            if (m_CharacterController.center.y != m_CharacterController.height / 2)
-                EditorGUILayout.HelpBox("The Character Controller Y center must be half of the height. Set your Y center to " + m_CharacterController.height / 2 + "!", MessageType.Warning);
-
-            serializedObject.Update();
-            int newTab = GUILayout.Toolbar(m_CurrentTab, m_Tabs);
-            if (newTab != m_CurrentTab)
+            if (currentTab < 0)
             {
-                m_CurrentTab = newTab;
-                EditorPrefs.SetInt(SELECTED_TAB_PREFS, m_CurrentTab);
+                currentTab = 0;
             }
 
-            if (m_CurrentTab == 0) // Camera
+            if (currentTab > 4)
+            {
+                currentTab = 4;
+            }
+
+            camera = serializedObject.FindProperty("camera");
+            movement = serializedObject.FindProperty("movement");
+            headBob = serializedObject.FindProperty("headBob");
+            audio = serializedObject.FindProperty("audio");
+
+            goldPlayer = (GoldPlayerController)target;
+            characterController = goldPlayer.GetComponent<CharacterController>();
+        }
+
+#if !UNITY_2019_1_OR_NEWER
+        public override void OnInspectorGUI()
+        {
+            if (characterController.center.y != characterController.height / 2)
+            {
+                EditorGUILayout.HelpBox("The Character Controller Y center must be half of the height. Set your Y center to " + characterController.height / 2 + "!", MessageType.Warning);
+            }
+
+            serializedObject.Update();
+            int newTab = GUILayout.Toolbar(currentTab, tabs);
+            if (newTab != currentTab)
+            {
+                currentTab = newTab;
+                EditorPrefs.SetInt(SELECTED_TAB_PREFS, currentTab);
+            }
+
+            if (currentTab == 0) // Camera
             {
                 DoCameraGUI();
             }
-            else if (m_CurrentTab == 1) // Movement
+            else if (currentTab == 1) // Movement
             {
                 DoMovementGUI();
             }
-            else if (m_CurrentTab == 2) // Head bob
+            else if (currentTab == 2) // Head bob
             {
                 DoHeadBobGUI();
             }
-            else if (m_CurrentTab == 3) // Audio
+            else if (currentTab == 3) // Audio
             {
                 DoAudioGUI();
+            }
+            else if (currentTab == 4)
+            {
+                DoInputGUI();
             }
             serializedObject.ApplyModifiedProperties();
         }
 
         private void DoCameraGUI()
         {
-            SerializedProperty it = m_Camera.Copy();
+            SerializedProperty it = camera.Copy();
             while (it.NextVisible(true))
             {
-                if (it.propertyPath.StartsWith(m_Camera.name) && it.depth < 2)
+                if (it.propertyPath.StartsWith(camera.name) && it.depth < 2)
+                {
+                    if (it.name.StartsWith("input_"))
+                    {
+                        continue;
+                    }
+
                     EditorGUILayout.PropertyField(it, true);
+                }
             }
         }
 
         private void DoMovementGUI()
         {
-            SerializedProperty it = m_Movement.Copy();
+            SerializedProperty it = movement.Copy();
             while (it.NextVisible(true))
             {
-                if (it.propertyPath.StartsWith(m_Movement.name) && it.depth < 2)
+                if (it.propertyPath.StartsWith(movement.name) && it.depth < 2)
                 {
+                    if (it.name.StartsWith("input_"))
+                    {
+                        continue;
+                    }
+
                     EditorGUILayout.PropertyField(it, true);
-                    if (it.name.Equals("m_CrouchHeight") && it.floatValue < 0.8f)
+                    if (it.name.Equals("crouchHeight") && it.floatValue < 0.8f)
+                    {
                         EditorGUILayout.HelpBox("The Crouch Height should not be less than 0.8 because it breaks the character controller!", MessageType.Warning);
-                    if (it.name.Equals("m_GroundLayer") && it.intValue == (it.intValue | (1 << m_GoldPlayer.gameObject.layer)))
+                    }
+
+                    if (it.name.Equals("groundLayer") && it.intValue == (it.intValue | (1 << goldPlayer.gameObject.layer)))
+                    {
                         EditorGUILayout.HelpBox("The player layer should not be included as a Ground Layer!", MessageType.Warning);
+                    }
                 }
             }
         }
 
         private void DoHeadBobGUI()
         {
-            SerializedProperty it = m_HeadBob.Copy();
+            SerializedProperty it = headBob.Copy();
             while (it.NextVisible(true))
             {
-                if (it.propertyPath.StartsWith(m_HeadBob.name) && !it.propertyPath.StartsWith(m_HeadBob.name + ".m_BobClass") && it.depth < 2)
+                if (it.propertyPath.StartsWith(headBob.name) && !it.propertyPath.StartsWith(headBob.name + ".bobClass") && it.depth < 2)
+                {
                     EditorGUILayout.PropertyField(it, true);
+                }
 
-                if (it.propertyPath.StartsWith(m_HeadBob.name + ".m_BobClass") && it.depth >= 2)
+                if (it.propertyPath.StartsWith(headBob.name + ".bobClass") && it.depth >= 2)
+                {
                     EditorGUILayout.PropertyField(it, true);
+                }
             }
         }
 
         private void DoAudioGUI()
         {
-            SerializedProperty it = m_Audio.Copy();
+            SerializedProperty it = audio.Copy();
             while (it.NextVisible(true))
             {
-                if (it.propertyPath.StartsWith(m_Audio.name) && it.depth < 2)
+                if (it.propertyPath.StartsWith(audio.name) && it.depth < 2)
+                {
                     EditorGUILayout.PropertyField(it, true);
+                }
             }
         }
+
+        private void DoInputGUI()
+        {
+            EditorGUILayout.LabelField("Camera", EditorStyles.boldLabel);
+
+            SerializedProperty cam = camera.Copy();
+            while (cam.NextVisible(true))
+            {
+                if (cam.propertyPath.StartsWith(camera.name) && cam.depth < 2)
+                {
+                    if (cam.name.StartsWith("input_"))
+                    {
+                        EditorGUILayout.PropertyField(cam, new GUIContent(cam.displayName.Substring(6), cam.tooltip), true);
+                    }
+                }
+            }
+
+            EditorGUILayout.LabelField("Movement", EditorStyles.boldLabel);
+
+            SerializedProperty move = movement.Copy();
+            while (move.NextVisible(true))
+            {
+                if (move.propertyPath.StartsWith(movement.name) && move.depth < 2)
+                {
+                    if (move.name.StartsWith("input_"))
+                    {
+                        EditorGUILayout.PropertyField(move, new GUIContent(move.displayName.Substring(6), move.tooltip), true);
+                    }
+                }
+            }
+
+        }
+#else
+        public override VisualElement CreateInspectorGUI()
+        {
+            root = new VisualElement();
+
+            controllerWarning = GetHelpBox("The Character Controller Y center must be half of the height. Set your Y center to " + characterController.height / 2 + "!", MessageType.Warning);
+
+            if (characterController != null)
+            {
+                controllerWarning.style.display = characterController.center.y != characterController.height / 2 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            root.Add(controllerWarning);
+
+            IVisualElementScheduledItem controllerCheck = root.schedule.Execute(() =>
+            {
+                if (characterController != null)
+                {
+                    controllerWarning.style.display = characterController.center.y != characterController.height / 2 ? DisplayStyle.Flex : DisplayStyle.None;
+                }
+            });
+            controllerCheck.Every(100);
+
+            IMGUIContainer toolbarContainer = new IMGUIContainer(() =>
+            {
+                int newTab = GUILayout.Toolbar(currentTab, tabs);
+                if (newTab != currentTab)
+                {
+                    currentTab = newTab;
+                    EditorPrefs.SetInt(SELECTED_TAB_PREFS, currentTab);
+                    RebuildTab(currentTab);
+                }
+            });
+
+            root.Add(toolbarContainer);
+            root.Add(GetSpace(3));
+
+            inputElements = new VisualElement();
+
+#if ENABLE_INPUT_SYSTEM && UNITY_2019_3_OR_NEWER
+            inputElements.Add(new PropertyField(serializedObject.FindProperty("actionMap")));
+#endif
+
+            CreateCameraGUI();
+            CreateMovementGUI();
+            CreateHeadBobGUI();
+            CreateAudioGUI();
+
+            root.Add(cameraElements);
+            root.Add(movementElements);
+            root.Add(headBobElements);
+            root.Add(audioElements);
+            root.Add(inputElements);
+
+            RebuildTab(currentTab);
+
+            return root;
+        }
+
+        private void RebuildTab(int tab)
+        {
+            cameraElements.style.display = tab == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            movementElements.style.display = tab == 1 ? DisplayStyle.Flex : DisplayStyle.None;
+            headBobElements.style.display = tab == 2 ? DisplayStyle.Flex : DisplayStyle.None;
+            audioElements.style.display = tab == 3 ? DisplayStyle.Flex : DisplayStyle.None;
+            inputElements.style.display = tab == 4 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void CreateCameraGUI()
+        {
+            inputElements.Add(GetHeaderLabel("Camera"));
+
+            cameraElements = new VisualElement();
+            SerializedProperty it = camera.Copy();
+            while (it.NextVisible(true))
+            {
+                if (it.propertyPath.StartsWith(camera.name) && it.depth < 2)
+                {
+                    if (it.name.Equals("invertXAxis"))
+                    {
+                        cameraElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("mouseSensitivity"))
+                    {
+                        cameraElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("fieldOfViewKick"))
+                    {
+                        cameraElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("cameraHead"))
+                    {
+                        cameraElements.Add(GetSpace());
+                    }
+
+                    if (it.name.StartsWith("input_"))
+                    {
+                        inputElements.Add(new PropertyField(it, it.displayName.Substring(6)));
+                        continue;
+                    }
+
+                    cameraElements.Add(new PropertyField(it));
+                }
+            }
+        }
+
+        private void CreateMovementGUI()
+        {
+            inputElements.Add(GetHeaderLabel("Movement"));
+
+            movementElements = new VisualElement();
+
+            movement = serializedObject.FindProperty("movement");
+            SerializedProperty it = movement.Copy();
+            while (it.NextVisible(true))
+            {
+                if (it.propertyPath.StartsWith(movement.name) && it.depth < 2)
+                {
+                    if (it.name.Equals("walkingSpeeds"))
+                    {
+                        movementElements.Add(GetHeaderLabel("Walking"));
+                    }
+
+                    if (it.name.Equals("canRun"))
+                    {
+                        movementElements.Add(GetHeaderLabel("Running"));
+                    }
+
+                    if (it.name.Equals("canJump"))
+                    {
+                        movementElements.Add(GetHeaderLabel("Jumping"));
+                    }
+
+                    if (it.name.Equals("canCrouch"))
+                    {
+                        movementElements.Add(GetHeaderLabel("Crouching"));
+                    }
+
+                    if (it.name.Equals("groundLayer"))
+                    {
+                        movementElements.Add(GetHeaderLabel("Other"));
+                    }
+
+                    if (it.name.StartsWith("input_"))
+                    {
+                        inputElements.Add(new PropertyField(it, it.displayName.Substring(6)));
+                        continue;
+                    }
+
+                    PropertyField field = new PropertyField(it);
+                    movementElements.Add(field);
+                    if (it.name.Equals("crouchHeight"))
+                    {
+                        crouchHeightWarning = GetHelpBox("The Crouch Height should not be less than 0.8 because it breaks the character controller!", MessageType.Warning);
+
+                        movementElements.Add(crouchHeightWarning);
+
+                        field.RegisterCallback<ChangeEvent<float>>((evt) => { ValidateCrouchHeight(evt.newValue); });
+
+                        ValidateCrouchHeight(it.floatValue);
+                    }
+
+                    if (it.name.Equals("groundLayer"))
+                    {
+                        groundLayerWarning = GetHelpBox("The player layer should not be included as a Ground Layer!", MessageType.Warning);
+
+                        field.RegisterCallback<ChangeEvent<int>>((evt) => { ValidateGroundLayer(evt.newValue); });
+
+                        ValidateGroundLayer(it.intValue);
+                    }
+                }
+            }
+        }
+
+        private void ValidateCrouchHeight(float height)
+        {
+            crouchHeightWarning.style.display = height < 0.8f ? DisplayStyle.Flex : (StyleEnum<DisplayStyle>)DisplayStyle.None;
+        }
+
+        private void ValidateGroundLayer(int layer)
+        {
+            groundLayerWarning.style.display = layer == (layer | (1 << goldPlayer.gameObject.layer)) ?
+                (StyleEnum<DisplayStyle>)DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void CreateHeadBobGUI()
+        {
+            headBobElements = new VisualElement();
+
+            SerializedProperty it = headBob.Copy();
+            while (it.NextVisible(true))
+            {
+                if ((it.propertyPath.StartsWith(headBob.name) && !it.propertyPath.StartsWith(headBob.name + ".bobClass") && it.depth < 2) ||
+                    it.propertyPath.StartsWith(headBob.name + ".bobClass") && it.depth >= 2)
+                {
+                    if (it.name.Equals("bobFrequency"))
+                    {
+                        headBobElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("landMove"))
+                    {
+                        headBobElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("enableStrafeTilting"))
+                    {
+                        headBobElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("bobTarget"))
+                    {
+                        headBobElements.Add(GetSpace());
+                    }
+
+                    headBobElements.Add(new PropertyField(it));
+                }
+            }
+
+            it.Reset();
+        }
+
+        private void CreateAudioGUI()
+        {
+            audioElements = new VisualElement();
+
+            SerializedProperty it = audio.Copy();
+            while (it.NextVisible(true))
+            {
+                if (it.propertyPath.StartsWith(audio.name) && it.depth < 2)
+                {
+                    if (it.name.Equals("basedOnHeadBob"))
+                    {
+                        audioElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("walkFootsteps"))
+                    {
+                        audioElements.Add(GetSpace());
+                    }
+
+                    if (it.name.Equals("footstepsSource"))
+                    {
+                        audioElements.Add(GetSpace());
+                    }
+
+                    audioElements.Add(new PropertyField(it));
+                }
+            }
+        }
+#endif
     }
 }
 #endif

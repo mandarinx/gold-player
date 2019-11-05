@@ -1,22 +1,29 @@
 using Hertzole.GoldPlayer.Core;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Hertzole.GoldPlayer
 {
+#if !ENABLE_INPUT_SYSTEM
     [AddComponentMenu("Gold Player/Gold Player Input", 02)]
     [DisallowMultipleComponent]
+#else
+    [System.Obsolete("You're using the new Input System so this component will be useless.")]
+#endif
     public class GoldPlayerInput : GoldInput
     {
         [SerializeField]
         [Tooltip("Determines if the input should be based around KeyCodes. If false, Input Manager will be used.")]
-        private bool m_UseKeyCodes;
+        [FormerlySerializedAs("m_UseKeyCodes")]
+        private bool useKeyCodes = true;
 
         [Space]
 
         [SerializeField]
         [Tooltip("All the available inputs.")]
-        private InputItem[] m_Inputs = new InputItem[]
+        [FormerlySerializedAs("m_Inputs")]
+        private InputItem[] inputs = new InputItem[]
         {
             new InputItem("Horizontal", "Horizontal", KeyCode.None),
             new InputItem("Vertical", "Vertical", KeyCode.None),
@@ -44,12 +51,12 @@ namespace Hertzole.GoldPlayer
 #endif
         };
 
-        private Dictionary<string, InputItem> m_InputsDic;
+        private Dictionary<string, InputItem> inputsDic;
 
         /// <summary> Determines if the input should be based around KeyCodes. If false, Input Manager will be used. </summary>
-        public bool UseKeyCodes { get { return m_UseKeyCodes; } set { m_UseKeyCodes = value; } }
+        public bool UseKeyCodes { get { return useKeyCodes; } set { useKeyCodes = value; } }
         /// <summary> All the available inputs. </summary>
-        public InputItem[] Inputs { get { return m_Inputs; } set { m_Inputs = value; UpdateInputs(); } }
+        public InputItem[] Inputs { get { return inputs; } set { inputs = value; UpdateInputs(); } }
 
         private void Start()
         {
@@ -58,47 +65,84 @@ namespace Hertzole.GoldPlayer
 
         public void UpdateInputs()
         {
-            m_InputsDic = new Dictionary<string, InputItem>();
-            m_InputsDic.Clear();
+            inputsDic = new Dictionary<string, InputItem>();
+            inputsDic.Clear();
 
-            for (int i = 0; i < m_Inputs.Length; i++)
+            for (int i = 0; i < inputs.Length; i++)
             {
-                m_InputsDic.Add(m_Inputs[i].ButtonName, m_Inputs[i]);
+                inputsDic.Add(inputs[i].ButtonName, inputs[i]);
             }
         }
 
+#if !ENABLE_INPUT_SYSTEM
         public override bool GetButton(string buttonName)
         {
-            if (m_UseKeyCodes)
-                return Input.GetKey(m_InputsDic[buttonName].Key);
-            else
-                return Input.GetButton(m_InputsDic[buttonName].InputName);
+            if (inputsDic == null)
+            {
+                UpdateInputs();
+            }
+
+            return useKeyCodes ? Input.GetKey(inputsDic[buttonName].Key) : Input.GetButton(inputsDic[buttonName].InputName);
         }
 
         public override bool GetButtonDown(string buttonName)
         {
-            if (m_UseKeyCodes)
-                return Input.GetKeyDown(m_InputsDic[buttonName].Key);
-            else
-                return Input.GetButtonDown(m_InputsDic[buttonName].InputName);
+            if (inputsDic == null)
+            {
+                UpdateInputs();
+            }
+
+            return useKeyCodes ? Input.GetKeyDown(inputsDic[buttonName].Key) : Input.GetButtonDown(inputsDic[buttonName].InputName);
         }
 
         public override bool GetButtonUp(string buttonName)
         {
-            if (m_UseKeyCodes)
-                return Input.GetKeyUp(m_InputsDic[buttonName].Key);
-            else
-                return Input.GetButtonUp(m_InputsDic[buttonName].InputName);
+            if (inputsDic == null)
+            {
+                UpdateInputs();
+            }
+
+            return useKeyCodes ? Input.GetKeyUp(inputsDic[buttonName].Key) : Input.GetButtonUp(inputsDic[buttonName].InputName);
         }
 
         public override float GetAxis(string axisName)
         {
-            return Input.GetAxis(m_InputsDic[axisName].InputName);
+            if (inputsDic == null)
+            {
+                UpdateInputs();
+            }
+
+            return Input.GetAxis(inputsDic[axisName].InputName);
         }
 
         public override float GetAxisRaw(string axisName)
         {
-            return Input.GetAxisRaw(m_InputsDic[axisName].InputName);
+            if (inputsDic == null)
+            {
+                UpdateInputs();
+            }
+
+            return Input.GetAxisRaw(inputsDic[axisName].InputName);
+        }
+#endif
+
+        /// <summary>
+        /// Returns the Input Item that matches the buttonName in the given InputItem array.
+        /// </summary>
+        /// <param name="buttonName">The name of the item to try and find.</param>
+        /// <param name="inputsArray">The array to search in to find the item.</param>
+        protected virtual InputItem GetItem(string buttonName, InputItem[] inputsArray)
+        {
+            for (int i = 0; i < inputsArray.Length; i++)
+            {
+                if (inputsArray[i].ButtonName == buttonName)
+                {
+                    return inputsArray[i];
+                }
+            }
+
+            Debug.LogError("No input with the name '" + buttonName + "' assigned on '" + gameObject.name + "'!");
+            return new InputItem();
         }
     }
 }

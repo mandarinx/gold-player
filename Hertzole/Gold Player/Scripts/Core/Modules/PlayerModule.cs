@@ -5,16 +5,18 @@ namespace Hertzole.GoldPlayer
 {
     public class PlayerModule
     {
-        private GoldPlayerController m_PlayerController;
-        protected GoldPlayerController PlayerController { get { return m_PlayerController; } }
+        private string rootActionMap;
 
-        protected CharacterController CharacterController { get { return m_PlayerController.Controller; } }
+        private GoldPlayerController playerController;
+        protected GoldPlayerController PlayerController { get { return playerController; } }
 
-        private Transform m_PlayerTransform;
-        protected Transform PlayerTransform { get { if (m_PlayerTransform == null) m_PlayerTransform = m_PlayerController.transform; return m_PlayerTransform; } }
+        protected CharacterController CharacterController { get { return playerController.Controller; } }
 
-        private GoldInput m_PlayerInput;
-        protected GoldInput PlayerInput { get { return m_PlayerInput; } }
+        private Transform playerTransform;
+        protected Transform PlayerTransform { get { if (playerTransform == null) { playerTransform = playerController.transform; } return playerTransform; } }
+
+        private GoldInput playerInput;
+        protected GoldInput PlayerInput { get { return playerInput; } }
 
         /// <summary> True if the module has been initialized. </summary>
         public bool HasBeenInitialized { get; private set; }
@@ -24,25 +26,28 @@ namespace Hertzole.GoldPlayer
         /// </summary>
         /// <param name="player">The player controller itself.</param>
         /// <param name="input">Input, if available.</param>
-        public void Initialize(GoldPlayerController player, GoldInput input = null)
+        public void Initialize(GoldPlayerController player, GoldInput input)
         {
             // If the module has already been initialized, stop here.
             if (HasBeenInitialized)
+            {
                 return;
+            }
 
-            m_PlayerController = player;
+            playerController = player;
             if (input != null)
-                m_PlayerInput = input;
+            {
+                playerInput = input;
+            }
+
+            if (player != null)
+            {
+                rootActionMap = player.ActionMap;
+            }
 
             OnInitialize();
 
             HasBeenInitialized = true;
-        }
-
-        [System.Obsolete("Use 'Initialize' instead! This will be removed in a future version.")]
-        public void Init(GoldPlayerController player, GoldInput input = null)
-        {
-            Initialize(player, input);
         }
 
         /// <summary>
@@ -50,100 +55,91 @@ namespace Hertzole.GoldPlayer
         /// </summary>
         protected virtual void OnInitialize() { }
 
-        [System.Obsolete("Use 'OnInitialize' instead! This will be removed in a future version.")]
-        protected virtual void OnInit() { }
-
         /// <summary>
         /// Called in Update.
         /// </summary>
-        public virtual void OnUpdate() { }
+        public virtual void OnUpdate(float deltaTime) { }
 
         /// <summary>
         /// Called in FixedUpdate.
         /// </summary>
-        public virtual void OnFixedUpdate() { }
+        public virtual void OnFixedUpdate(float fixedDeltaTime) { }
 
         /// <summary>
         /// Called in LateUpdate.
         /// </summary>
-        public virtual void OnLateUpdate() { }
+        public virtual void OnLateUpdate(float deltaTime) { }
+
+        [System.Obsolete("Use 'GetButton' without defaultKey parameter instead.")]
+        protected bool GetButton(string buttonName, KeyCode defaultKey = KeyCode.None) { return GetButton(buttonName); }
 
         /// <summary>
         /// Equivalent to Input's GetButton/GetKey function.
         /// </summary>
         /// <param name="buttonName">The button name you want to get.</param>
-        /// <param name="defaultKey">A default key in case the input script is null.</param>
-        protected bool GetButton(string buttonName, KeyCode defaultKey = KeyCode.None)
+        protected bool GetButton(string buttonName)
         {
-            // If player input isn't null, get the key using that. Else use the default key.
-            if (PlayerInput != null)
-                return PlayerInput.GetButton(buttonName);
-            else
-                return Input.GetKey(defaultKey);
+            return PlayerInput.GetButton(string.IsNullOrWhiteSpace(rootActionMap) ? buttonName : rootActionMap + "/" + buttonName);
         }
+
+        [System.Obsolete("Use 'GetButtonDown' without defaultKey parameter instead.")]
+        protected bool GetButtonDown(string buttonName, KeyCode defaultKey = KeyCode.None) { return GetButtonDown(buttonName); }
 
         /// <summary>
         /// Equivalent to Input's GetButtonDown/GetKeyDown function.
         /// </summary>
         /// <param name="buttonName">The button name you want to get.</param>
-        /// <param name="defaultKey">A default key in case the input script is null.</param>
-        protected bool GetButtonDown(string buttonName, KeyCode defaultKey = KeyCode.None)
+        protected bool GetButtonDown(string buttonName)
         {
-            // If player input isn't null, get the key using that. Else use the default key.
-            if (PlayerInput != null)
-                return PlayerInput.GetButtonDown(buttonName);
-            else
-                return Input.GetKeyDown(defaultKey);
+            return PlayerInput.GetButtonDown(string.IsNullOrWhiteSpace(rootActionMap) ? buttonName : rootActionMap + "/" + buttonName);
         }
+
+        [System.Obsolete("Use 'GetButtonUp' without defaultKey parameter instead.")]
+        protected bool GetButtonUp(string buttonName, KeyCode defaultKey = KeyCode.None) { return GetButtonUp(buttonName); }
 
         /// <summary>
         /// Equivalent to Input's GetButtonUp/GetKeyUp function.
         /// </summary>
         /// <param name="buttonName">The button name you want to get.</param>
-        /// <param name="defaultKey">A default key in case the input script is null.</param>
-        protected bool GetButtonUp(string buttonName, KeyCode defaultKey = KeyCode.None)
+        protected bool GetButtonUp(string buttonName)
         {
-            // If player input isn't null, get the key using that. Else use the default key.
-            if (PlayerInput != null)
-                return PlayerInput.GetButtonUp(buttonName);
-            else
-                return Input.GetKeyUp(defaultKey);
+            return PlayerInput.GetButtonUp(string.IsNullOrWhiteSpace(rootActionMap) ? buttonName : rootActionMap + "/" + buttonName);
         }
+
+        [System.Obsolete("Use 'GetAxis' without defaultAxisName parameter instead.")]
+        protected float GetAxis(string axisName, string defaultAxisName = "") { return GetAxis(axisName); }
 
         /// <summary>
         /// Equivalent to Input's GetAxis function.
         /// </summary>
         /// <param name="axisName">The axis name you want to get.</param>
-        /// <param name="defaultAxisName">A default axis name in case the input script is null.</param>
-        protected float GetAxis(string axisName, string defaultAxisName = "")
+        protected float GetAxis(string axisName)
         {
-            // If the default axis name is blank, use the one provided in axisName.
-            if (string.IsNullOrEmpty(defaultAxisName))
-                defaultAxisName = axisName;
-
-            // If player input isn't null, get the axis using that. Else use the default axis name.
-            if (PlayerInput != null)
-                return PlayerInput.GetAxis(axisName);
-            else
-                return Input.GetAxis(defaultAxisName);
+            return PlayerInput.GetAxis(string.IsNullOrWhiteSpace(rootActionMap) ? axisName : rootActionMap + "/" + axisName);
         }
+
+        [System.Obsolete("Use 'GetAxisRaw' without defaultAxisName parameter instead.")]
+        protected float GetAxisRaw(string axisName, string defaultAxisName = "") { return GetAxisRaw(axisName); }
 
         /// <summary>
         /// Equivalent to Input's GetAxisRaw function.
         /// </summary>
         /// <param name="axisName">The axis name you want to get.</param>
-        /// <param name="defaultAxisName">A default axis name in case the input script is null.</param>
-        protected float GetAxisRaw(string axisName, string defaultAxisName = "")
+        protected float GetAxisRaw(string axisName)
         {
-            // If the default axis name is blank, use the one provided in axisName.
-            if (string.IsNullOrEmpty(defaultAxisName))
-                defaultAxisName = axisName;
+            return PlayerInput.GetAxisRaw(string.IsNullOrWhiteSpace(rootActionMap) ? axisName : rootActionMap + "/" + axisName);
+        }
 
-            // If player input isn't null, get the axis using that. Else use the default axis name.
-            if (PlayerInput != null)
-                return PlayerInput.GetAxisRaw(axisName);
-            else
-                return Input.GetAxisRaw(defaultAxisName);
+#if !ENABLE_INPUT_SYSTEM
+        [System.Obsolete("GetVector2Input does nothing with the Input Manager.")]
+#endif
+        protected Vector2 GetVector2Input(string action)
+        {
+#if ENABLE_INPUT_SYSTEM && UNITY_2019_3_OR_NEWER
+            return PlayerInput.GetVector2(string.IsNullOrWhiteSpace(rootActionMap) ? action : rootActionMap + "/" + action);
+#else
+            return Vector2.zero;
+#endif
         }
 
 #if UNITY_EDITOR
