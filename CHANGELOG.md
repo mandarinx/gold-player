@@ -1,3 +1,13 @@
+## 1.4.1
+### Improvements:
+- Input now looks for an interface instead of a class. It makes it much easier to make your own input class.
+- You can now manually control when input gets enabled and disabled in Gold Player Input System.
+- Interaction now looks for an interface instead of just one class. It makes it much easier to make your own interactable objects through code.
+
+### Fixes:
+- Fixed using normal input manager not working.
+- Fixed Null error with interaction component.
+
 ## 1.4
 ### Added:
 - Added support for Unity's new input system (requires 2019.3+ to work with Gold Player!)
