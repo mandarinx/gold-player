@@ -84,6 +84,10 @@ namespace Hertzole.GoldPlayer.Core
         private bool doShake = false;
         // Was the camera previously shaking?
         private bool previouslyShaking = false;
+        // Check to see if the player is force looking.
+        private bool forceLooking = false;
+        // Check to see if the player is being forced to look at a target.
+        private bool forceLookAtTarget = false;
 
         // Sets how strong the camera shake is.
         private float shakeFrequency = 0;
@@ -103,6 +107,11 @@ namespace Hertzole.GoldPlayer.Core
         private float startRecoil;
         // The current recoil time.
         private float currentRecoilTime = 0;
+        // The smoothing intensity when force looking.
+        private float lookAtStrength;
+
+        // The action used for looking around.
+        private string lookInput;
 
         // The current input from the mouse.
         private Vector2 mouseInput = Vector2.zero;
@@ -119,11 +128,24 @@ namespace Hertzole.GoldPlayer.Core
         private Vector3 followHeadVelocity = Vector3.zero;
         // The body smooth velocity.
         private Vector3 followBodyVelocity = Vector3.zero;
+        // The point where the player will be forced to look at.
+        private Vector3 lookPoint;
+        // The force look direction of the body.
+        private Vector3 bodyLookDirection;
+        // The force look direction of the head.
+        private Vector3 headLookDirection;
 
         // The original head rotation.
         private Quaternion originalHeadRotation = Quaternion.identity;
         // The rotation the head should be facing.
         private Quaternion targetHeadRotation = Quaternion.identity;
+        // The force look body rotation
+        private Quaternion bodyLookRotation;
+        // The force look head rotation.
+        private Quaternion headLookRotation;
+
+        // The target to forcibly look at.
+        private Transform lookTarget;
 
         /// <summary> Determines if the player can look around. </summary>
         public bool CanLookAround { get { return canLookAround; } set { canLookAround = value; } }
@@ -149,7 +171,7 @@ namespace Hertzole.GoldPlayer.Core
         public Transform CameraHead { get { return cameraHead; } set { cameraHead = value; } }
 
         /// <summary> Look action for the new Input System. </summary>
-        public string LookInput { get { return input_Look; } set { input_Look = value; } }
+        public string LookInput { get { return lookInput; } set { input_Look = value; lookInput = rootActionMap + "/" + input_Look; } }
         /// <summary> Mouse X axis for the old Input Manager. </summary>
         public string MouseX { get { return input_MouseX; } set { input_MouseX = value; } }
         /// <summary> Mouse Y axis for the old Input Manager. </summary>
@@ -189,6 +211,8 @@ namespace Hertzole.GoldPlayer.Core
 
             // Initialize the FOV kick module.
             fieldOfViewKick.Initialize(PlayerController, PlayerInput);
+
+            lookInput = rootActionMap + "/" + input_Look;
         }
 
         /// <summary>
@@ -205,6 +229,7 @@ namespace Hertzole.GoldPlayer.Core
 
         public override void OnUpdate(float deltaTime)
         {
+            ForceLookHandler();
             MouseHandler(deltaTime);
             fieldOfViewKick.OnUpdate(deltaTime);
             ShakeHandler(deltaTime);
@@ -239,11 +264,11 @@ namespace Hertzole.GoldPlayer.Core
 
             // If the player can look around, get the input. 
             // Else just set the input to zero.
-            if (canLookAround)
+            if (canLookAround && !forceLooking)
             {
                 // Set the input.
 #if ENABLE_INPUT_SYSTEM && UNITY_2019_3_OR_NEWER
-                mouseInput = GetVector2Input(input_Look) * mouseSensitivity;
+                mouseInput = GetVector2Input(lookInput) * mouseSensitivity;
                 if (invertXAxis)
                 {
                     mouseInput.x = -mouseInput.x;
@@ -263,20 +288,23 @@ namespace Hertzole.GoldPlayer.Core
                 mouseInput = Vector2.zero;
             }
 
-            // Apply the input and mouse sensitivity.
-            targetHeadAngles.x += mouseInput.y * mouseSensitivity * Time.fixedUnscaledDeltaTime;
-            targetBodyAngles.y += mouseInput.x * mouseSensitivity * Time.fixedUnscaledDeltaTime;
+            if (!forceLooking)
+            {
+                // Apply the input and mouse sensitivity.
+                targetHeadAngles.x -= mouseInput.y * mouseSensitivity * Time.fixedUnscaledDeltaTime;
+                targetBodyAngles.y += mouseInput.x * mouseSensitivity * Time.fixedUnscaledDeltaTime;
 
-            // Clamp the head angle.
-            targetHeadAngles.x = Mathf.Clamp(targetHeadAngles.x, minimumX, maximumX);
+                // Clamp the head angle.
+                targetHeadAngles.x = Mathf.Clamp(targetHeadAngles.x, minimumX, maximumX);
 
-            // Smooth the movement.
-            followHeadAngles = Vector3.SmoothDamp(followHeadAngles, targetHeadAngles, ref followHeadVelocity, mouseDamping);
-            followBodyAngles = Vector3.SmoothDamp(followBodyAngles, targetBodyAngles, ref followBodyVelocity, mouseDamping);
+                // Smooth the movement.
+                followHeadAngles = Vector3.SmoothDamp(followHeadAngles, targetHeadAngles, ref followHeadVelocity, mouseDamping);
+                followBodyAngles = Vector3.SmoothDamp(followBodyAngles, targetBodyAngles, ref followBodyVelocity, mouseDamping);
 
-            // Set the rotation on the camera head and player.
-            targetHeadRotation = originalHeadRotation * Quaternion.Euler(-followHeadAngles.x + (-recoil), cameraHead.rotation.y, cameraHead.rotation.z);
-            PlayerTransform.rotation = PlayerTransform.rotation * Quaternion.Euler(-followBodyAngles.x, followBodyAngles.y, 0);
+                // Set the rotation on the camera head and player.
+                targetHeadRotation = originalHeadRotation * Quaternion.Euler(followHeadAngles.x + (-recoil), 0, 0);
+                PlayerTransform.rotation = PlayerTransform.rotation * Quaternion.Euler(-followBodyAngles.x, followBodyAngles.y, 0);
+            }
 
             // If recoil is above 0, decrease it. If not, just set it to 0.
             if (recoil > 0f)
@@ -347,6 +375,56 @@ namespace Hertzole.GoldPlayer.Core
             }
         }
 
+        protected virtual void ForceLookHandler()
+        {
+            // Only run if the player is looking at something.
+            if (forceLooking)
+            {
+                // If there's a target, update the look point to that target.
+                if (forceLookAtTarget)
+                {
+                    lookPoint = lookTarget.position;
+                }
+
+                // Get the direction of the body.
+                bodyLookDirection = lookPoint - PlayerTransform.position;
+                // Get the direction of the head.
+                headLookDirection = lookPoint - cameraHead.position;
+
+                // The body only needs to know the X and Z axis because it does not look up and down.
+                bodyLookDirection.y = 0;
+
+                // Get the body rotation.
+                bodyLookRotation = Quaternion.LookRotation(bodyLookDirection, Vector3.up);
+
+                // Because when the Z-axis is positive, the view will invert. So let's invert it back.
+                if (bodyLookDirection.z > 0)
+                {
+                    headLookDirection.y = -headLookDirection.y;
+                }
+
+                // Get the head rotation.
+                headLookRotation = Quaternion.AngleAxis(Vector3.SignedAngle(headLookDirection, bodyLookDirection, Vector3.right), Vector3.right);
+
+                // If the strength is above 0, make the look smooth.
+                // Else make it instant.
+                if (lookAtStrength > 0)
+                {
+                    PlayerTransform.rotation = Quaternion.Slerp(PlayerTransform.rotation, bodyLookRotation, lookAtStrength * Time.deltaTime);
+                    targetHeadRotation = Quaternion.Slerp(targetHeadRotation, headLookRotation, lookAtStrength * Time.deltaTime);
+                }
+                else
+                {
+                    PlayerTransform.rotation = bodyLookRotation;
+                    targetHeadRotation = headLookRotation;
+                }
+
+                // Get the X look angle to make sure the camera doesn't snap back when we stop force looking.
+                float lookAngle = cameraHead.transform.eulerAngles.x <= 90f ? -cameraHead.eulerAngles.x : 360 - cameraHead.eulerAngles.x;
+                targetHeadAngles.x = -lookAngle;
+            }
+        }
+
         /// <summary>
         /// Starts a camera shake.
         /// </summary>
@@ -393,6 +471,54 @@ namespace Hertzole.GoldPlayer.Core
         }
 
         /// <summary>
+        /// Forces the player to look at a target. With a target assigned, it will move with the target.
+        /// </summary>
+        /// <param name="target">The target to look at.</param>
+        /// <param name="strength">The strength of the look. Set to 0 for instant.</param>
+        public void ForceLook(Transform target, float strength = 10)
+        {
+            if (target == null)
+            {
+                StopForceLooking();
+                return;
+            }
+
+            ForceLookInternal(strength);
+            forceLookAtTarget = true;
+            lookTarget = target;
+            lookPoint = target.position;
+        }
+
+        /// <summary>
+        /// Forces the player to look at a position.
+        /// </summary>
+        /// <param name="point">The position to look at.</param>
+        /// <param name="strength">The strength of the look. Set to 0 for instant.</param>
+        public void ForceLook(Vector3 point, float strength = 10)
+        {
+            ForceLookInternal(strength);
+            forceLookAtTarget = false;
+            lookTarget = null;
+            lookPoint = point;
+        }
+
+        /// <summary>
+        /// Stops the player from force looking.
+        /// </summary>
+        public void StopForceLooking()
+        {
+            forceLookAtTarget = false;
+            lookTarget = null;
+            forceLooking = false;
+        }
+
+        private void ForceLookInternal(float strength)
+        {
+            forceLooking = true;
+            lookAtStrength = strength;
+        }
+
+        /// <summary>
         /// Get a random Vector3 shake based on perlin noise.
         /// </summary>
         /// <param name="frequency"></param>
@@ -418,6 +544,8 @@ namespace Hertzole.GoldPlayer.Core
         public override void OnValidate()
         {
             fieldOfViewKick.OnValidate();
+
+            lookInput = rootActionMap + "/" + input_Look;
         }
 #endif
     }
