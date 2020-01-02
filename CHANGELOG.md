@@ -1,3 +1,7 @@
+# 1.5.1
+### Fixes:
+- Fixed 'Can Move Around' not working with the normal input manager.
+
 # 1.5
 ### Added:
 - Movement multipliers in code. Can be used to easily make the player faster/slower and jump higher.
